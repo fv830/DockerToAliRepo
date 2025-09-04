@@ -5,7 +5,6 @@ on:
   push:
     branches: [ main ]
 
-
 env:
   ALIYUN_REGISTRY: "${{ secrets.ALIYUN_REGISTRY }}"
   ALIYUN_NAME_SPACE: "${{ secrets.ALIYUN_NAME_SPACE }}"
@@ -27,6 +26,7 @@ jobs:
     - name: Build and push image Aliyun
       run: |
         docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
+        
         # 数据预处理,判断镜像是否重名
         declare -A duplicate_images
         declare -A temp_map
@@ -37,9 +37,22 @@ jobs:
                 continue
             fi
             
+            # 分离平台参数和镜像名称
+            platform=""
+            image=""
+            
+            # 检查是否包含 --platform 参数
+            if echo "$line" | grep -q -- "--platform"; then
+                # 提取平台参数
+                platform=$(echo "$line" | grep -o -- "--platform[ =][^ ]*" | sed 's/--platform[ =]//')
+                # 提取镜像名称（移除平台参数）
+                image=$(echo "$line" | sed 's/--platform[ =][^ ]*//' | xargs)
+            else
+                # 如果没有平台参数，整行都是镜像名称
+                image="$line"
+            fi
+            
             # 获取镜像的完整名称，例如kasmweb/nginx:1.25.3（命名空间/镜像名:版本号）
-            image=$(echo "$line" | awk '{print $NF}')
-            # 将@sha256:等字符删除
             image="${image%%@*}"
             echo "image $image"
             # 获取镜像名:版本号  例如nginx:1.25.3
@@ -74,65 +87,59 @@ jobs:
             if echo "$line" | grep -q '^\s*#'; then
                 continue
             fi
+            
+            echo "Processing line: $line"
+            
+            # 分离平台参数和镜像名称
+            platform=""
+            image=""
+            
+            # 检查是否包含 --platform 参数
+            if echo "$line" | grep -q -- "--platform"; then
+                # 提取平台参数
+                platform=$(echo "$line" | grep -o -- "--platform[ =][^ ]*" | sed 's/--platform[ =]//')
+                # 提取镜像名称（移除平台参数）
+                image=$(echo "$line" | sed 's/--platform[ =][^ ]*//' | xargs)
+            else
+                # 如果没有平台参数，整行都是镜像名称
+                image="$line"
+            fi
         
-            line='ubuntu:22.04 --platform=arm64'
-
-# 提取镜像名称（第一个参数）
-image=$(echo "$line" | awk '{print $1}')
-
-# 提取平台参数
-platform_arg=$(echo "$line" | awk '{
-    for(i=1;i<=NF;i++) {
-        if ($i == "--platform") {
-            print "--platform " $(i+1)
-            break
-        } else if ($i ~ /^--platform=/) {
-            print $i
-            break
-        }
-    }
-}')
-
-echo "docker pull $image $platform_arg"
-docker pull $image $platform_arg
-
-# 获取平台信息
-platform=$(echo "$platform_arg" | awk -F'=' '{print $2}')
-if [ -z "$platform" ]; then
-    platform=$(echo "$platform_arg" | awk '{print $2}')
-fi
-
-echo "platform is $platform"
-
-# 如果存在架构信息 将架构信息拼到镜像名称前面
-if [ -z "$platform" ]; then
-    platform_prefix=""
-else
-    platform_prefix="${platform//\//_}_"
-fi
-echo "platform_prefix is $platform_prefix"
-
-# 获取 镜像名:版本号
-image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
-# 获取命名空间
-name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
-# 获取镜像名
-image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
-
-name_space_prefix=""
-# 如果镜像名重名
-if [[ -n "${duplicate_images[$image_name]}" ]]; then
-   #如果命名空间非空，将命名空间加到前缀
-   if [[ -n "${name_space}" ]]; then
-      name_space_prefix="${name_space}_"
-   fi
-fi
-
-# 将@sha256:等字符删除
-image_name_tag="${image_name_tag%%@*}"
-new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$platform_prefix$name_space_prefix$image_name_tag"
-echo "docker tag $image $new_image"
-docker tag $image $new_image
-echo "docker push $new_image"
-docker push $new_image
+            echo "docker pull $line"
+            docker pull $line
+            
+            echo "platform is: $platform"
+            # 如果存在架构信息 将架构信息拼到镜像名称前面
+            if [ -z "$platform" ]; then
+                platform_prefix=""
+            else
+                platform_prefix="${platform//\//_}_"
+            fi
+            echo "platform_prefix is: $platform_prefix"
+            
+            # 将@sha256:等字符删除
+            image="${image%%@*}"
+            echo "image after processing: $image"
+            
+            # 获取 镜像名:版本号  例如nginx:1.25.3
+            image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
+            # 获取命名空间 例如kasmweb  这里有种特殊情况 docker.io/nginx，把docker.io当成命名空间，也OK
+            name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+            # 获取镜像名例  例如nginx
+            image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
+        
+            name_space_prefix=""
+            # 如果镜像名重名
+            if [[ -n "${duplicate_images[$image_name]}" ]]; then
+               #如果命名空间非空，将命名空间加到前缀
+               if [[ -n "${name_space}" ]]; then
+                  name_space_prefix="${name_space}_"
+               fi
+            fi
+            
+            new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$platform_prefix$name_space_prefix$image_name_tag"
+            echo "docker tag $image $new_image"
+            docker tag $image $new_image
+            echo "docker push $new_image"
+            docker push $new_image
         done < images.txt
