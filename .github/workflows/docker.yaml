@@ -29,6 +29,20 @@ jobs:
         echo "ALIYUN_REGISTRY: $ALIYUN_REGISTRY"
         echo "ALIYUN_NAME_SPACE: $ALIYUN_NAME_SPACE"
         
+        # 检查环境变量是否为空
+        if [ -z "$ALIYUN_REGISTRY" ]; then
+            echo "Error: ALIYUN_REGISTRY is empty!"
+            exit 1
+        fi
+        
+        # 如果命名空间为空，使用默认值或直接使用registry
+        if [ -z "$ALIYUN_NAME_SPACE" ]; then
+            echo "Warning: ALIYUN_NAME_SPACE is empty, using registry only"
+            TARGET_NAMESPACE=""
+        else
+            TARGET_NAMESPACE="$ALIYUN_NAME_SPACE/"
+        fi
+        
         docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
         
         # 数据预处理,判断镜像是否重名
@@ -152,14 +166,13 @@ jobs:
                 final_image_name="${platform_prefix}${image_name_tag}"
             fi
             
-            # 确保环境变量不为空
-            if [ -z "$ALIYUN_REGISTRY" ] || [ -z "$ALIYUN_NAME_SPACE" ]; then
-                echo "Error: ALIYUN_REGISTRY or ALIYUN_NAME_SPACE is empty!"
-                exit 1
+            # 构建完整的新镜像名称
+            if [ -z "$TARGET_NAMESPACE" ]; then
+                new_image="$ALIYUN_REGISTRY/$final_image_name"
+            else
+                new_image="$ALIYUN_REGISTRY/$TARGET_NAMESPACE$final_image_name"
             fi
             
-            # 构建完整的新镜像名称
-            new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$final_image_name"
             echo "New image name: $new_image"
             
             echo "docker tag $image $new_image"
