@@ -25,6 +25,10 @@ jobs:
 
     - name: Build and push image Aliyun
       run: |
+        # 调试输出环境变量
+        echo "ALIYUN_REGISTRY: $ALIYUN_REGISTRY"
+        echo "ALIYUN_NAME_SPACE: $ALIYUN_NAME_SPACE"
+        
         docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
         
         # 数据预处理,判断镜像是否重名
@@ -148,7 +152,13 @@ jobs:
                 final_image_name="${platform_prefix}${image_name_tag}"
             fi
             
-            # 确保最终的镜像名称格式正确
+            # 确保环境变量不为空
+            if [ -z "$ALIYUN_REGISTRY" ] || [ -z "$ALIYUN_NAME_SPACE" ]; then
+                echo "Error: ALIYUN_REGISTRY or ALIYUN_NAME_SPACE is empty!"
+                exit 1
+            fi
+            
+            # 构建完整的新镜像名称
             new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$final_image_name"
             echo "New image name: $new_image"
             
