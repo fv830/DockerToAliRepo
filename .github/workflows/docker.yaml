@@ -140,8 +140,16 @@ jobs:
                fi
             fi
             
-            # 构建新的镜像名称
-            new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/${platform_prefix}${name_space_prefix}${image_name_tag}"
+            # 构建新的镜像名称 - 确保格式正确：registry/namespace/image_name:tag
+            # 如果命名空间前缀不为空，添加下划线分隔符
+            if [ -n "$name_space_prefix" ]; then
+                final_image_name="${platform_prefix}${name_space_prefix}${image_name_tag}"
+            else
+                final_image_name="${platform_prefix}${image_name_tag}"
+            fi
+            
+            # 确保最终的镜像名称格式正确
+            new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$final_image_name"
             echo "New image name: $new_image"
             
             echo "docker tag $image $new_image"
